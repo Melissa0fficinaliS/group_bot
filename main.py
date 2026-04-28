@@ -141,6 +141,21 @@ async def forward_all_messages(message: types.Message, bot):
             )
 
 
+@dp.message(Command("ban"), F.reply_to_message)
+async def cmd_ban(message: types.Message, admins: set[int]):
+    print("бан")
+    if message.from_user.id not in admins:
+        await message.answer(
+            "не для вас команда"
+        )
+    else:
+        await message.chat.ban(
+            user_id=message.reply_to_message.from_user.id
+        )
+        await message.answer("нахуй с чата")
+
+
+
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
