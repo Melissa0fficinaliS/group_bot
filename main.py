@@ -64,6 +64,12 @@ async def request_access(message: types.Message):
                     text="апрувнуть",
                     callback_data=f"approve:{message.chat.id}:{message.from_user.id}"
                 )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="дернуть анус",
+                    callback_data=f"reject:{message.chat.id}:{message.from_user.id}"
+                )
             ]
         ]
     )
@@ -110,6 +116,25 @@ async def approve_handler(callback: CallbackQuery):
     await callback.message.edit_reply_markup(reply_markup=None)
 
     await callback.answer("Ссылка создана")
+
+@dp.callback_query(F.data.startswith("reject:"))
+async def approve_handler(callback: CallbackQuery):
+
+    _, source_chat_id, user_id = callback.data.split(":")
+    source_chat_id = int(source_chat_id)
+
+    member = await callback.bot.get_chat_member(
+        callback.message.chat.id,
+        callback.from_user.id
+    )
+    await callback.bot.send_message(
+        source_chat_id,
+        f"вас не приняли, идите нахуй"
+    )
+
+
+
+
 
 @dp.message(Command("ban"), F.reply_to_message)
 async def cmd_ban(message: types.Message):
