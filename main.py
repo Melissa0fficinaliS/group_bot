@@ -20,6 +20,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 TTYAN_CHAT_ID = os.getenv("TTYAN_CHAT_ID")
 MELISKIN_ID = os.getenv("MELISKIN_ID")
 
+invited_users = set()
 
 logging.basicConfig(level=logging.INFO)
 
@@ -88,7 +89,7 @@ async def approve_handler(callback: CallbackQuery):
         callback.from_user.id
     )
 
-    if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR] and member.user.id == MELISKIN_ID:
+    if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
         await callback.answer("Не для вас написано, тегните админа если срочно надо", show_alert=True)
         return
 
@@ -98,6 +99,8 @@ async def approve_handler(callback: CallbackQuery):
         name=user_id,
         creates_join_request = False
     )
+    invited_users.add(str(user_id))
+    print(invited_users)
 
     await callback.bot.send_message(
         source_chat_id,
@@ -146,38 +149,65 @@ async def cmd_ban(message: types.Message):
     except Exception as e:
         await message.answer(f"не удалось забанить: {e}")
 
-@dp.message()
-async def forward_all_messages(message: types.Message, bot):
-    user = message.from_user
-    user_id = user.id
-    username = user.username or "нет username"
-    message_id = message.message_id
-    name = user.full_name
 
-    text_info = (
-        f"massage id:{message_id}:\n"\
-        f"name: {name}\n"
-        f"ID: {user_id}\n"
-        f"Username: @{username}\n\n"
-    )
+@dp.message(F.new_chat_members)
+async def check_new_members(message: types.Message):
+    for user in message.new_chat_members:
+        user_id = str(user.id)
 
-    # если текст
-    if message.text:
-        await bot.send_message(
-            MELISKIN_ID,
-            text_info + f"💬 Сообщение:\n{message.text}"
-        )
-    else:
-        await bot.send_message(MELISKIN_ID, text_info)
-        try:
-            await message.forward(MELISKIN_ID)
-        except:
-            await bot.copy_message(
-                chat_id=MELISKIN_ID,
-                from_chat_id=message.chat.id,
-                message_id=message.message_id
+        # если он НЕ в списке одобренных — баним
+        if user_id not in invited_users:
+            await bot.ban_chat_member(
+                chat_id=message.chat.id,
+                user_id=user.id
             )
 
+            # мягкий кик (чтобы не держать в пермабане)
+            await bot.unban_chat_member(
+                chat_id=message.chat.id,
+                user_id=user.id,
+                only_if_banned=True
+            )
+
+            await message.answer(f"{user.full_name} удалён: нахуй с чата если не по ссылке от бота.")
+        else:
+            # одобрен — пропускаем и убираем одноразовый токен
+            invited_users.discard(user_id)
+
+
+
+# @dp.message()
+# async def forward_all_messages(message: types.Message, bot):
+#     user = message.from_user
+#     user_id = user.id
+#     username = user.username or "нет username"
+#     message_id = message.message_id
+#     name = user.full_name
+#
+#     text_info = (
+#         f"massage id:{message_id}:\n"\
+#         f"name: {name}\n"
+#         f"ID: {user_id}\n"
+#         f"Username: @{username}\n\n"
+#     )
+#
+#     # если текст
+#     if message.text:
+#         await bot.send_message(
+#             MELISKIN_ID,
+#             text_info + f"💬 Сообщение:\n{message.text}"
+#         )
+#     else:
+#         await bot.send_message(MELISKIN_ID, text_info)
+#         try:
+#             await message.forward(MELISKIN_ID)
+#         except:
+#             await bot.copy_message(
+#                 chat_id=MELISKIN_ID,
+#                 from_chat_id=message.chat.id,
+#                 message_id=message.message_id
+#             )
+#
 
 
 async def main():
