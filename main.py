@@ -13,6 +13,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 import filters.chat_type
 from filters.not_in_chat import NotInTargetChat
 
+from datetime import datetime, timedelta
 
 
 load_dotenv()
@@ -21,6 +22,10 @@ TTYAN_CHAT_ID = os.getenv("TTYAN_CHAT_ID")
 MELISKIN_ID = os.getenv("MELISKIN_ID")
 
 invited_users = set()
+last_photo_requests = {}
+PHOTO_COOLDOWN = timedelta(minutes=10)
+user_joins = {}
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -55,7 +60,25 @@ async def cmd_start(message: types.Message):
 
 @dp.message(F.photo, filters.chat_type.ChatTypeFilter("private"), NotInTargetChat(TTYAN_CHAT_ID))
 async def request_access(message: types.Message):
-    photo = message.photo[-1].file_id
+    user_id = message.from_user.id
+    now = datetime.now()
+
+    # Проверка кулдауна
+    if user_id in last_photo_requests:
+        elapsed = now - last_photo_requests[user_id]
+
+        if elapsed < PHOTO_COOLDOWN:
+            remaining = PHOTO_COOLDOWN - elapsed
+            minutes = remaining.seconds // 60
+            seconds = remaining.seconds % 60
+
+            await message.answer(
+                f"Фото уже отправлялось. Попробуйте через {minutes} мин {seconds} сек."
+            )
+            return
+
+    # записываем время последней попытки
+    last_photo_requests[user_id] = now
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -67,7 +90,7 @@ async def request_access(message: types.Message):
             ],
             [
                 InlineKeyboardButton(
-                    text="дернуть анус",
+                    text="дЁрнуть анус",
                     callback_data=f"reject:{message.chat.id}:{message.from_user.id}"
                 )
             ]
@@ -125,12 +148,17 @@ async def approve_handler(callback: CallbackQuery):
 
     member = await callback.bot.get_chat_member(
         callback.message.chat.id,
-        callback.from_user.id
-    )
+        callback.from_user.id)
+
+    if member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
+        await callback.answer("Не для вас написано, тегните админа если срочно надо", show_alert=True)
+        return
+
     await callback.bot.send_message(
         source_chat_id,
         f"вас не приняли, идите нахуй"
     )
+    await callback.message.edit_reply_markup(reply_markup=None)
 
 
 
@@ -177,29 +205,43 @@ async def cmd_ban(message: types.Message):
 
 @dp.message(F.new_chat_members)
 async def check_new_members(message: types.Message):
+    global total_joins
+
     for user in message.new_chat_members:
         user_id = str(user.id)
 
-        # если он НЕ в списке одобренных — баним
+        # если НЕ по ссылке бота — кик
         if user_id not in invited_users:
             await bot.ban_chat_member(
                 chat_id=message.chat.id,
                 user_id=user.id
             )
 
-            # мягкий кик (чтобы не держать в пермабане)
             await bot.unban_chat_member(
                 chat_id=message.chat.id,
                 user_id=user.id,
                 only_if_banned=True
             )
 
-            await message.answer(f"{user.full_name} удалён: нахуй с чата если не по ссылке от бота.")
+            await message.answer(
+                f"{user.full_name} удалён: нахуй с чата если не по ссылке от бота."
+            )
+
         else:
-            # одобрен — пропускаем и убираем одноразовый токен
+            # убираем одноразовый токен
             invited_users.discard(user_id)
 
 
+            # персональный счётчик
+            if user.id not in user_joins:
+                user_joins[user.id] = 1
+            else:
+                user_joins[user.id] += 1
+
+            await message.answer(
+                f"👋 Добро пожаловать, {user.full_name}!\n"
+                f"Ты зашла {user_joins[user.id]} раз(а).\n"
+            )
 
 # @dp.message()
 # async def forward_all_messages(message: types.Message, bot):
